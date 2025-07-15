@@ -16,11 +16,15 @@ This lab has two main goals:
 
 # Table of Contents
 
-- [ 1 - Components of an Event-Streaming Platform](#1)
-  - [ 1.1 - Get Link to the AWS console](#1-1)
-  - [ 1.2 - Create a Data Stream](#1-2)
-  - [ 1.3 - understanding consumer_from_cli.py](#1-3)
-  - [ 1.4 - running consumer_from_cli.py](#1-3)
+- [ 1 - THEORY](#1)
+  - [ 1.1 - Components of an Event-Streaming Platform](#1-1)
+  - [ 1.2 - Shards and iterators](#1-2)
+- [ 2 - Create a Data Stream](#2)
+- [ 3 - UNDERSTANDING consumer_from_cli.py](#3)
+  - [ a) Parse Stream Name with argparse](#3-a)
+  - [ b) fetch_shards_and_iterators()](#3-b)
+  - [ c) poll_shards()]
+- [ 4 - RUNNING consumer_from_cli.py](#4)
 - [ 2 - Implementing a Streaming ETL Process](#2)
   - [ 2.1 - Creating the Infrastructure for the Streaming ETL Process](#2-1)
   - [ 2.2 - Implementing the Streaming ETL](#2-2)
@@ -76,7 +80,7 @@ shard_iterator = response['ShardIterator']
 
 
 
-## CREATE A DATA STREAM
+## 2. CREATE A DATA STREAM
 <a id='1-1'></a>
 #### Get the link to the AWS console
 
@@ -102,6 +106,7 @@ HTML(f'<a href="{aws_url}" target="_blank">GO TO AWS CONSOLE</a>')
 <a id='3'></a>
 ## UNDERSTANDING consumer_from_cli.py
 
+<a id='3-a'></a>
 ### a) Parse Stream Name with argparse
 Outside of the main, create a new argument object called parser and add to it the argument "stream":
 
@@ -137,7 +142,14 @@ Then, inside of the `main()`, the name of the stream is obtained by:
     kinesis_stream_name = args.stream
 ```
 
-### class ShardIteratorPair
+<a id='3-b'></a>
+### b) fetch_shards_and_iterators()
+
+This function 
+- iterates over all shards in the stream and retrieves their iterators with type "TRIM_HORIZON"
+- It stores the shard IDs and iterators in a list of objects of the class ShardIteratorPair class.
+
+#### class ShardIteratorPair
 Class representing a pair of a shard ID and its corresponding shard iterator.
 
 Additional note: to view the values in the pairs, a `__repr__` method can be added:
@@ -161,12 +173,18 @@ ShardIteratorPair(shard_id='shardId-000000000001', iterator='AAAAAAAAAA...')
 ```
 
 
-###  fetch_shards_and_iterators()
+<a id='3-b'></a>
+### b) poll_shards()
+the poll_shards function continuously reads records from Kinesis shards:
+
+- Decodes and logs each record.
+- Updates shard iterators to maintain progress.
+- Handles errors gracefully.
+- Sleeps briefly between polling cycles.
 
 
-
-<a id='1-4'></a>
-### running consumer_from_cli.py
+<a id='4'></a>
+### RUNNING consumer_from_cli.py
 
 #### First run of the script
 This consumer script iterates through all the shards of the data stream, reading all the records from each shard and printing some information about each record in the terminal. 
