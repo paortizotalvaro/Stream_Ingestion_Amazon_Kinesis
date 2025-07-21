@@ -27,22 +27,19 @@ This lab has two main goals:
       - [ c) poll_shards()] (#3-c)
   - [ 3.2 - Running consumer_from_cli.py](#3-2)
 - [ 4 - PRODUCE: WRITE TO THE STREAM]
-  - [ 4.1  - Understanding producer_from_cli.py](#3-1)
-      - [ a) ](#3-a)
-      - [ b) ](#3-b)
-      - [ c) ] (#3-c)
-  - [ 4.2 - Running producer_from_cli.py](#3-2)
-- [ 5 - IMPLEMENTING A STREAMING ETL PROCESS](#2)
-  - [ 2.1 - Creating the Infrastructure for the Streaming ETL Process](#2-1)
-  - [ 2.2 - Implementing the Streaming ETL](#2-2)
+  - [ 4.1 - Understanding producer_from_cli.py](#4-1)
+  - [ 4.2 - Running producer_from_cli.py](#4-2)
+- [ 5 - IMPLEMENTING A STREAMING ETL PROCESS](#5)
+  - [ 5.1 - Creating the Infrastructure for the Streaming ETL Process](#5-1)
+  - [ 5.2 - Implementing the Streaming ETL](#5-2)
 
 
 
 <a id='1'></a>
-## 1 THEORY
+# 1 THEORY
 
 <a id='1-1'></a>
-### 1.1 - Components of an Event-Streaming Platform
+## 1.1 - Components of an Event-Streaming Platform
 
 An event-driven architecture consists of
 
@@ -55,14 +52,14 @@ a producer ----> a router (buffer/message broker) ----> a consumer.
 - consumer: in the same folder `src/cli`, you can find the Python script: `consumer_from_cli.py` which you will also call from the command line interface (CLI). It takes in one argument which is the name of the Kinesis Data Stream from which the consumer will read the message records.
 
 <a id='1-2'></a>
-### 1.2 - Shards and Iterators
+## 1.2 - Shards and Iterators
 
 - A __shard__ is a uniquely identified sequence of data records in a stream. Each stream consists of one or more shards, which determine the stream’s capacity.
 
 - A __shard iterator__ is a token that tells Kinesis where to start reading data from within a shard. You use it to retrieve records using the GetRecords API. 
   It acts like a pointer that enables you to read data records from a specific position in a shard within a stream.
 
-##### Types of Shard Iterators
+#### Types of Shard Iterators
 When you request a shard iterator, you specify the type, which determines where in the shard the iterator starts:
 
 - TRIM_HORIZON: Start from the oldest available record.
@@ -71,7 +68,7 @@ When you request a shard iterator, you specify the type, which determines where 
 - AFTER_SEQUENCE_NUMBER: Start right after a specific sequence number.
 - AT_TIMESTAMP: Start from records at or after a specific timestamp.
 
-##### Example Usage
+#### Example Usage
 
 ```python
 response = kinesis_client.get_shard_iterator(
@@ -87,9 +84,9 @@ shard_iterator = response['ShardIterator']
 
 
 
-## 2. CREATE A DATA STREAM
+# 2. CREATE A DATA STREAM
 <a id='1-1'></a>
-#### Get the link to the AWS console
+### Get the link to the AWS console
 
 For these labs the url is provided to access the AWS console. It can be accessed in the notebook with:
 
@@ -109,10 +106,10 @@ HTML(f'<a href="{aws_url}" target="_blank">GO TO AWS CONSOLE</a>')
 
 
 <a id='3'></a>
-## CONSUMING FROM THE STREAM
+# 3. CONSUMING FROM THE STREAM
 
 <a id='3-1'></a>
-## Understanding consumer_from_cli.py
+## 3.1 Understanding consumer_from_cli.py
 
 <a id='3-a'></a>
 ### a) Parse Stream Name with argparse
@@ -182,7 +179,7 @@ ShardIteratorPair(shard_id='shardId-000000000001', iterator='AAAAAAAAAA...')
 
 
 <a id='3-c'></a>
-### b) poll_shards()
+### c) poll_shards()
 the poll_shards function continuously reads records from Kinesis shards:
 
 - Decodes and logs each record.
@@ -193,7 +190,7 @@ the poll_shards function continuously reads records from Kinesis shards:
 
 
 <a id='3-2'></a>
-### Running consumer_from_cli.py
+### 3.2 Running consumer_from_cli.py
 
 #### First run of the script
 This consumer script iterates through all the shards of the data stream, reading all the records from each shard and printing some information about each record in the terminal. 
@@ -213,10 +210,10 @@ In this first run nothing will now appear even after waiting for 1 or 2 minutes.
 
 
 <a id='4'></a>
-## PRODUCE: WRITE TO THE STREAM
+# 4.0PRODUCE: WRITE TO THE STREAM
 
 <a id='4-1'></a>
-### Understanding producer_from_cli.py
+## 4.1 Understanding producer_from_cli.py
 The script sends a single JSON-formatted record to an Amazon Kinesis data stream using command-line arguments.
 
 Workflow:
@@ -226,7 +223,7 @@ Workflow:
 4. Use the session_id from the JSON as the partition key.
 5. Log the result or any errors.
 
-#### kinesis.put_record()
+### kinesis.put_record()
 This script uses kinesis.put_record(). <br>
 The kinesis.put_record() method in the Boto3 AWS SDK for Python is used to send a single data record into an Amazon Kinesis Data Stream.<br>
 Basic syntax:
@@ -257,10 +254,9 @@ response = kinesis.put_record(
           - Records with the same partition key go to the same shard, preserving order.
           - Choosing a diverse set of keys helps balance load across shards.
 
+          
 <a id='4-2'></a>
-### Running producer_from_cli.py
-
-
+## 4.2 Running producer_from_cli.py
 
 ```bash
 cd src/cli/
@@ -268,8 +264,8 @@ python producer_from_cli.py --stream de-c2w2lab1-kinesis-data-stream-cli --json_
 ```
 
 
-
-## IMPLEMENTING A STREAMING ETL PROCESS
+<a id='5'></a>
+# 5. IMPLEMENTING A STREAMING ETL PROCESS
 
 Consumer-side infrastructure of a streaming ETL pipeline for an e-commerce event-streaming scenario.<br>
 The producer and the initial Kinesis Data Stream are already provided.
@@ -322,6 +318,18 @@ Using multiple data streams allows for data segregation based on transformation 
 - Better scalability and fault isolation.
 - More targeted analytics.
 
+
+
+
+<a id='5-1'></a>
+## 5.1. Creating the Infrastructure for the Streaming ETL Process
+
+### a) Define account ID and region
+```python
+ACCOUNT_ID = subprocess.run(['aws', 'sts', 'get-caller-identity', '--query', 'Account', '--output', 'text'], capture_output=True, text=True).stdout.strip()
+AWS_DEFAULT_REGION = 'us-east-1'
+```
+
 The subprocess module in Python is used to spawn new processes, connect to their input/output/error pipes, and obtain their return codes. It's a powerful tool for running shell commands or external programs from within a Python script.
 
 ``` python
@@ -335,9 +343,73 @@ subprocess.run(
 
 ```
 
-* aws sts get-caller-identity: Gets details about the IAM identity used to make the request.
-* --query 'Account': Filters the output to show only the AWS account ID.
-* --output text: Returns the result as plain text (not JSON).
-* capture_output=True: Captures the command's output.
-* text=True: Ensures the output is returned as a string (not bytes).
-* .stdout.strip(): Removes any leading/trailing whitespace or newlines.
+- aws sts get-caller-identity: Gets details about the IAM identity used to make the request.
+- --query 'Account': Filters the output to show only the AWS account ID.
+- --output text: Returns the result as plain text (not JSON).
+- capture_output=True: Captures the command's output.
+- text=True: Ensures the output is returned as a string (not bytes).
+- .stdout.strip(): Removes any leading/trailing whitespace or newlines.
+
+
+### b) Create S3 buckets
+The two buckets follow this naming convention:
+- USA: `de-c2w2lab1-{ACCOUNT_ID}-usa`
+- International: `de-c2w2lab1-{ACCOUNT_ID}-international`
+
+
+```python
+import boto3
+
+USA_BUCKET = f'de-c2w2lab1-{ACCOUNT_ID}-usa'
+INTERNATIONAL_BUCKET = f'de-c2w2lab1-{ACCOUNT_ID}-int'
+
+
+def create_s3_bucket(bucket_name: str, region: str) -> None:
+   # Call the boto3 client with the `'s3'` resource and region. 
+    s3_client = boto3.client('s3', region_name=region)
+    
+    # Create the S3 bucket
+    try:
+        s3_client.create_bucket(Bucket=bucket_name)
+        print(f"S3 bucket '{bucket_name}' created successfully in region '{region}'.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+# Create the USA bucket
+create_s3_bucket(bucket_name=USA_BUCKET, region=AWS_DEFAULT_REGION)
+    
+# Create the international bucket
+create_s3_bucket(bucket_name=INTERNATIONAL_BUCKET, region=AWS_DEFAULT_REGION)
+
+
+```
+
+Expected output:
+```bash
+S3 bucket 'de-c2w2lab1-627657969326-usa' created successfully in region 'us-east-1'.
+S3 bucket 'de-c2w2lab1-627657969326-int' created successfully in region 'us-east-1'.
+```
+
+To check if the buckets exist with python:
+
+```Python
+!aws s3 ls
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
