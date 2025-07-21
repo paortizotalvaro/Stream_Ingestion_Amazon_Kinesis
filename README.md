@@ -155,7 +155,7 @@ This function
 - It stores the shard IDs and iterators in a list of objects of the class ShardIteratorPair class.
 
 #### class ShardIteratorPair
-Class representing a pair of a shard ID and its corresponding shard iterator.
+Data container class representing a pair of a shard ID and its corresponding shard iterator.
 
 Additional note: to view the values in the pairs, a `__repr__` method can be added:
 
@@ -397,19 +397,185 @@ To check if the buckets exist with python:
 !aws s3 ls
 ```
 
+### c) Create two Kinesis Data Streams
+Both streams should have a shard count of 2, meaning 2 partitions per stream, and should be named with the following convention:
+   - USA: `de-c2w2lab1-usa-data-stream`
+   - International: `de-c2w2lab1-international-data-stream`
+
+```python
+USA_DATA_STREAM = 'de-c2w2lab1-usa-data-stream'
+INTERNATIONAL_DATA_STREAM = 'de-c2w2lab1-international-data-stream'
+
+def create_kinesis_data_stream(stream_name: str, shard_count: int = 2) -> None:
+    # Call the boto3 client with the `kinesis` resource.  Store the object in `client`.
+    client = boto3.client("kinesis")
+
+    # Check if the stream already exists
+    if stream_name in client.list_streams()["StreamNames"]:
+        print(f"Kinesis data stream {stream_name} already exists")
+        return
+    
+    # Use the `create_stream()` method from the client and pass the data stream name and the shard count.
+    response = client.create_stream(StreamName=stream_name, ShardCount=shard_count)
+    print("Kinesis data stream created:", response)
+
+
+# Create the USA data stream
+create_kinesis_data_stream(stream_name=USA_DATA_STREAM, shard_count=2)
+
+# Create the International data stream
+create_kinesis_data_stream(stream_name=INTERNATIONAL_DATA_STREAM, shard_count=2)
+
+```
+
+Expected response
+```bash
+Kinesis data stream created: {'ResponseMetadata': {'RequestId': 'e107c00c-0d68-d008-81f6-58a7544e087c', 'HTTPStatusCode': 200, 'HTTPHeaders': {'x-amzn-requestid': 'e107c00c-0d68-d008-81f6-58a7544e087c', 'x-amz-id-2': 'G2dxa8Mav7BS123DF3s9ZKPjbEDEL9Djhf9HeaGTb/RxM2OnA3CEhAFJ9PXYDfoOiWP/lQ8Qbn25NvqLPCGFMHgvvj+SECav', 'date': 'Wed, 16 Jul 2025 12:09:15 GMT', 'content-type': 'application/x-amz-json-1.1', 'content-length': '0', 'connection': 'keep-alive'}, 'RetryAttempts': 0}}
+Kinesis data stream created: {'ResponseMetadata': {'RequestId': 'c2522b3f-910d-d3ba-a2a3-b3947339c0c0', 'HTTPStatusCode': 200, 'HTTPHeaders': {'x-amzn-requestid': 'c2522b3f-910d-d3ba-a2a3-b3947339c0c0', 'x-amz-id-2': 'i19f0jE4lAIMgllRuJqqm3BvOLUITmF/BdNK0c135aFIh9d847ypJbI9K8SfXpFcN8UF112m0wfUrDL8u41XDggnQfHpVhJU', 'date': 'Wed, 16 Jul 2025 12:09:16 GMT', 'content-type': 'application/x-amz-json-1.1', 'content-length': '0', 'connection': 'keep-alive'}, 'RetryAttempts': 0}}
+```
+
+#### Check the status of the resources
+```python
+def is_stream_ready(stream_name: str) -> None:
+    client = boto3.client("kinesis")
+    response = client.describe_stream(StreamName=stream_name)
+    return response["StreamDescription"]["StreamStatus"] == "ACTIVE"
+
+# Check if the streams are ready
+print(is_stream_ready(stream_name=USA_DATA_STREAM))
+print(is_stream_ready(stream_name=INTERNATIONAL_DATA_STREAM))
+```
+
+
+### d) Create two Kinesis Firehose Instances
+
+``` python
+def create_kinesis_firehose( 
+    firehose_name: str, 
+    stream_name: str, 
+    bucket_name: str, 
+    role_name: str, 
+    log_group: str, 
+    log_stream:str, 
+    account_id: int, 
+    region: str):
+
+    # Call the boto3 client with the firehose resource. Assign it to the client variable.
+    client = boto3.client("firehose")
+
+    # Check if firehose stream already exists
+    if firehose_name in client.list_delivery_streams()["DeliveryStreamNames"]:
+        print(f"Kinesis firehose stream {firehose_name} already exists.")
+        return
+    
+    # Use the create_delivery_stream() method of the client object.
+    response = client.create_delivery_stream(
+        # Pass the firehose name.
+        DeliveryStreamName=firehose_name,
+        # Specify that the delivery stream uses a Kinesis data stream as a source.
+        DeliveryStreamType='KinesisStreamAsSource',
+        # Configure the S3 as the destination.
+        S3DestinationConfiguration={
+            # The ARN of the IAM role that Firehose will assume to access S3 and other services.
+            "RoleARN": f"arn:aws:iam::{account_id}:role/{role_name}",
+            # The ARN of the S3 bucket where data will be stored.
+            "BucketARN": f"arn:aws:s3:::{bucket_name}",
+            # The folder path prefix for delivered data in the S3 bucket.
+            "Prefix": "firehose/",
+            # Prefix for storing error records in S3.
+            "ErrorOutputPrefix": "errors/",
+            # Controls how Firehose buffers incoming data before writing to S3 (max size/time)
+            "BufferingHints": {"SizeInMBs": 1, "IntervalInSeconds": 60},
+            "CompressionFormat": "UNCOMPRESSED",  
+            "CloudWatchLoggingOptions": {
+                "Enabled": True,
+                "LogGroupName": log_group, 
+                "LogStreamName": log_stream
+            },
+            # control encription settings
+            "EncryptionConfiguration": {"NoEncryptionConfig": "NoEncryption"},
+        },
+        # Configure the Kinesis Stream as the Source.
+        KinesisStreamSourceConfiguration={
+            "KinesisStreamARN": f"arn:aws:kinesis:{region}:{account_id}:stream/{stream_name}",
+            "RoleARN": f"arn:aws:iam::{account_id}:role/{role_name}",
+        },
+    )
+    
+    print("Kinesis Firehose created:", response)
+
+
+# Create the delivery stream for USA orders.
+create_kinesis_firehose(firehose_name='de-c2w2lab1-firehose-usa', 
+                        stream_name=USA_DATA_STREAM,
+                        bucket_name=USA_BUCKET,
+                        role_name='de-c2w2lab1-firehose-role', 
+                        log_group='de-c2w2lab1-firehose-usa-log-group', 
+                        log_stream='de-c2w2lab1-usa-firehose-log-stream', 
+                        account_id=ACCOUNT_ID, 
+                        region=AWS_DEFAULT_REGION 
+                       )
+
+# Create the delivery stream for International orders.
+create_kinesis_firehose(firehose_name='de-c2w2lab1-firehose-international', 
+                        stream_name=INTERNATIONAL_DATA_STREAM,
+                        bucket_name=INTERNATIONAL_BUCKET,
+                        role_name='de-c2w2lab1-firehose-role', 
+                        log_group='de-c2w2lab1-firehose-international-log-group', 
+                        log_stream='de-c2w2lab1-international-firehose-log-stream', 
+                        account_id=ACCOUNT_ID, 
+                        region=AWS_DEFAULT_REGION 
+                       )
+
+
+```
 
 
 
+This function makes use of the `boto3` client method [create_delivery_stream()](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/firehose/client/create_delivery_stream.html). The arguments passed into this method include:
+  - the source, source: Kinesis Data Stream
+  - and destination for the Kinesis Firehose, destination: S3 bucket
+  - The role name passed into the configuration of the source and destination, represents the role that will be attached to the Kinesis Firehose to allow it to read from a Kinesis Data Stream and write to an S3 bucket. <br>
+  Note that `arn` means Amazon resource name and it is used to uniquely identify AWS resources, you can learn more about it [here](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html#arn-syntax-kinesis-streams). 
+
+Once these resources are configured, Kinesis Firehose will be able to automatically read from the Kinesis Data Stream and automatically write to the S3 bucket. 
+
+
+Expected output:
+```bash
+Kinesis Firehose created: {'DeliveryStreamARN': 'arn:aws:firehose:us-east-1:627657969326:deliverystream/de-c2w2lab1-firehose-usa', 'ResponseMetadata': {'RequestId': 'e7b2f74a-0160-0d91-874a-eb5a5bee106f', 'HTTPStatusCode': 200, 'HTTPHeaders': {'x-amzn-requestid': 'e7b2f74a-0160-0d91-874a-eb5a5bee106f', 'x-amz-id-2': '/KImT3AYyvw+UImlspmESukSzZQ1uC/96fLTPFoZicDpF1Y5TwYpAQxQQgUr9LcbOZIXbnA2lxpIj3+jiunGQPZOXKTopZ5E', 'content-type': 'application/x-amz-json-1.1', 'content-length': '103', 'date': 'Mon, 21 Jul 2025 10:43:28 GMT'}, 'RetryAttempts': 0}}
+Kinesis Firehose created: {'DeliveryStreamARN': 'arn:aws:firehose:us-east-1:627657969326:deliverystream/de-c2w2lab1-firehose-international', 'ResponseMetadata': {'RequestId': 'c695f69a-e480-b3ee-a66d-ea8ad2d1dd1a', 'HTTPStatusCode': 200, 'HTTPHeaders': {'x-amzn-requestid': 'c695f69a-e480-b3ee-a66d-ea8ad2d1dd1a', 'x-amz-id-2': 'yTFqkksR8Sa9y52sRMxYCazEP6ohU+7Eo/5gRqvFWRvgo/S/tEOnOplXlV09Np3nt5CXpmjcN+Wh2B0nXFL91dxf8sM74/Jf', 'content-type': 'application/x-amz-json-1.1', 'content-length': '113', 'date': 'Mon, 21 Jul 2025 10:43:29 GMT'}, 'RetryAttempts': 0}}
+```
 
 
 
+<a id='5-2'></a>
+## 5.2. Implementing the Streaming ETL Process
+
+- The producer generates data dynamically with an average mean time between records of 10 seconds, that should be taken into account when consuming the data and when visualizing it. 
+
+- During the consumption, there are some simple transformations over the records before sending them to the new data streams created with `boto3`. The transformation will consist of adding 4 additional attributes.
 
 
+### consumer.py
+Execute the consumer with the following command:
+
+```bash
+cd src/etl
+python consumer.py --source_stream de-c2w2lab1-kinesis-data-stream --dest_streams '{"USA": "de-c2w2lab1-usa-data-stream", "International": "de-c2w2lab1-international-data-stream"}'
+```
+
+By running this command, the producer will send records to the Kinesis Data Stream. This consumer script will read those records, transform them and then send them to the appropriate Kinesis streams. The Kinesis Firehose will finally automatically deliver the data to the S3 buckets. 
+
+*Note*: This command will run continuously, so as long as you don't exit the terminal, records will continue to be streamed.
 
 
+#### Check the destination streams
+To check the usa or the international destination stream, use another terminal. Use the consumer of the first part of the lab located at `src/cli/consumer_from_cli.py` to read from either the USA or International data stream to inspect visually your transformed data.
 
-
-
-
-
+```bash
+cd src/cli/
+python consumer_from_cli.py --stream de-c2w2lab1-usa-data-stream
+```
+Finally, you can inspect from the AWS console each of the S3 buckets to see when the data was saved (you can find the link to the AWS console in step 1.1). This process can take around 5-7 minutes to start seeing any file in the S3 bucket after the transformations are sent to the data streams. 
 
